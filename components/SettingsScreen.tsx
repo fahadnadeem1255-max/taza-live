@@ -17,6 +17,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack, onNavigate, sho
   ];
 
   const generalSettings = [
+    { label: 'Block List', view: 'blockList' as View },
     { label: 'Notifications', view: 'notificationsSettings' as View },
     { label: 'Language', view: 'language' as View },
     { label: 'Clear cache', action: () => showToast('Cache has been cleared!') },

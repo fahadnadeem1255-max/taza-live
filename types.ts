@@ -58,6 +58,10 @@ export interface User {
   follow: number;
   friends: number;
   fans: number;
+  followers?: number;
+  following?: number;
+  followingUserIds?: string[];
+  blockedUserIds?: string[];
   frameUrl?: string; // The large decorative frame
   vipLevel: number;
   vipBadgeUrl: string; // The small green VIP badge
@@ -72,6 +76,28 @@ export interface User {
     monthly: GiftingStat[];
     overall: GiftingStat[];
   };
+  checkInStreak?: number;
+  lastCheckInDate?: string;
+  hasCheckedInToday?: boolean;
+  badges?: string[];
+  activeBadge?: string;
+  unlockedFrames?: string[];
+}
+
+export type LuckyRewardType = 'coins' | 'frame' | 'badge';
+
+export interface LuckyWheelReward {
+  id: string;
+  name: string;
+  type: LuckyRewardType;
+  value: number | string;
+  icon: string;
+  description: string;
+  color: string;
+  textColor: string;
+  probabilityWeight: number;
+  rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
+  rarityBadge: string;
 }
 
 export interface Message {
@@ -104,6 +130,20 @@ export interface Reward {
   description: string;
   coins: number;
   action: 'claim' | 'go';
+}
+
+export interface DailyMission {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  rewardCoins: number;
+  currentProgress: number;
+  targetProgress: number;
+  unit?: string;
+  category: 'social' | 'stream' | 'activity';
+  isClaimed: boolean;
+  actionType: 'like_profile' | 'send_gift' | 'watch_stream' | 'share_room' | 'send_chat' | 'follow_user';
 }
 
 // --- NEW TYPES FOR DYNAMIC WITHDRAWAL ---
@@ -151,6 +191,7 @@ export type View =
   | 'batch' // was badge
   | 'ranking' // Replaces contribution
   | 'reward'
+  | 'missions'
   | 'invite'
   // New views from screenshot
   | 'discover'

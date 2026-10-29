@@ -97,36 +97,45 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUser, onBa
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-purple-800 flex-shrink-0">
-        <div className="flex items-center space-x-2">
-            <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-400 hover:text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
-            </button>
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
-            <button onClick={handleSendVoice} className="p-2 text-gray-400 hover:text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0a5 5 0 01-5 5A5 5 0 015 8a1 1 0 10-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" /></svg>
-            </button>
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSendText()}
-            placeholder="Type a message..."
-            className="flex-grow bg-gray-800 border border-purple-700 rounded-full px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
-          />
-          <button
-            onClick={handleSendText}
-            className="bg-pink-600 text-white rounded-full p-3 flex-shrink-0 hover:bg-pink-700 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-          </button>
+      {currentUser.blockedUserIds?.includes(conversation.user.id) ? (
+        <div className="p-4 border-t border-red-900/60 bg-red-950/40 text-center flex-shrink-0">
+          <p className="text-xs text-red-300 font-medium flex items-center justify-center gap-1.5">
+            <span>🚫</span>
+            <span>You have blocked {conversation.user.username || conversation.user.name}. Messaging and interactions are disabled.</span>
+          </p>
         </div>
-         <div className="text-xs text-gray-500 text-center mt-2">
-            Text: 1 coin | Voice: 2 coins | Picture: 2 coins
+      ) : (
+        <div className="p-4 border-t border-purple-800 flex-shrink-0">
+          <div className="flex items-center space-x-2">
+              <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-400 hover:text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
+              </button>
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+              <button onClick={handleSendVoice} className="p-2 text-gray-400 hover:text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0a5 5 0 01-5 5A5 5 0 015 8a1 1 0 10-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" /></svg>
+              </button>
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSendText()}
+              placeholder="Type a message..."
+              className="flex-grow bg-gray-800 border border-purple-700 rounded-full px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+            />
+            <button
+              onClick={handleSendText}
+              className="bg-pink-600 text-white rounded-full p-3 flex-shrink-0 hover:bg-pink-700 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+          </div>
+           <div className="text-xs text-gray-500 text-center mt-2">
+              Text: 1 coin | Voice: 2 coins | Picture: 2 coins
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

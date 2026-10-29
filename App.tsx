@@ -176,6 +176,25 @@ const App: React.FC = () => {
     setCurrentRoom(room);
     handleNavigate('room');
   };
+
+  useEffect(() => {
+    const handleHashCheck = () => {
+      const hash = window.location.hash;
+      if (hash && hash.includes('room=')) {
+        const match = hash.match(/room=([^&]+)/);
+        if (match && match[1]) {
+          const roomId = decodeURIComponent(match[1]);
+          const target = rooms.find(r => r.id === roomId);
+          if (target) {
+            handleJoinRoom(target);
+          }
+        }
+      }
+    };
+    handleHashCheck();
+    window.addEventListener('hashchange', handleHashCheck);
+    return () => window.removeEventListener('hashchange', handleHashCheck);
+  }, [rooms]);
   
   const handlePasswordSubmit = (password: string) => {
     if (roomToJoin && password === roomToJoin.password) {
@@ -287,15 +306,15 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (activeView) {
       case 'home':
-        return <HomeScreen rooms={rooms} onJoinRoom={handleJoinRoom} />;
+        return <HomeScreen rooms={rooms} onJoinRoom={handleJoinRoom} user={user} setUser={setUser} showToast={showToast} />;
       case 'room':
-        return currentRoom ? <RoomScreen room={currentRoom} rooms={rooms} onJoinRoom={handleJoinRoom} onLeave={handleLeaveRoom} user={user} setUser={setUser} onStopStream={handleStopStream} onViewProfile={handleViewProfile} onNavigate={handleSetView} showToast={showToast} onOpenGameModal={() => setIsGameModalOpen(true)} /> : <HomeScreen rooms={rooms} onJoinRoom={handleJoinRoom} />;
+        return currentRoom ? <RoomScreen room={currentRoom} rooms={rooms} onJoinRoom={handleJoinRoom} onLeave={handleLeaveRoom} user={user} setUser={setUser} onStopStream={handleStopStream} onViewProfile={handleViewProfile} onNavigate={handleSetView} showToast={showToast} onOpenGameModal={() => setIsGameModalOpen(true)} /> : <HomeScreen rooms={rooms} onJoinRoom={handleJoinRoom} user={user} setUser={setUser} showToast={showToast} />;
       case 'notifications':
         return <InboxScreen conversations={conversations} onJoinConversation={handleJoinConversation} />;
       case 'chat':
         return activeConversation ? <ChatScreen conversation={activeConversation} currentUser={user} onBack={handleBack} onSendMessage={handleSendMessage} showToast={showToast} /> : <InboxScreen conversations={conversations} onJoinConversation={handleJoinConversation} />;
       case 'profile':
-        return <ProfileScreen key={viewedProfile?.id || user.id} currentUser={user} profileUser={viewedProfile} setUser={setUser} onNavigate={handleSetView} showToast={showToast} onOpenGameModal={() => setIsGameModalOpen(true)} />;
+        return <ProfileScreen key={viewedProfile?.id || user.id} currentUser={user} profileUser={viewedProfile} setUser={setUser} onNavigate={handleSetView} onBack={handleBack} showToast={showToast} onOpenGameModal={() => setIsGameModalOpen(true)} />;
       case 'myRoom':
         return <MyRoomSetupScreen 
                   user={user} 
@@ -311,7 +330,9 @@ const App: React.FC = () => {
       case 'agency': return <AgencyScreen onBack={handleBack} />;
       case 'vip': return <VIPScreen onBack={handleBack} />;
       case 'mall': return <MallScreen onBack={handleBack} user={user} setUser={setUser} />;
-      case 'reward': return <RewardScreen onBack={handleBack} user={user} setUser={setUser} />;
+      case 'reward':
+      case 'missions':
+        return <RewardScreen onBack={handleBack} user={user} setUser={setUser} showToast={showToast} />;
       case 'settings': return <SettingsScreen onBack={handleBack} onNavigate={handleSetView} showToast={showToast} onLogout={handleLogout} />;
       case 'liveRecord': return <LiveRecordScreen onBack={handleBack} />;
       case 'level': return <LevelScreen onBack={handleBack} user={user} />;

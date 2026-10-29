@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { User, View, PaymentMethod, CountryPaymentOptions } from '../types';
 import { paymentOptionsByCountry } from '../constants';
 
@@ -307,27 +307,141 @@ interface ProfileScreenProps {
   onNavigate: (view: View) => void;
   showToast: (message: string) => void;
   onOpenGameModal: () => void;
+  onBack?: () => void;
 }
 
-const ProfileScreen: React.FC<ProfileScreenProps> = ({ currentUser, profileUser, setUser, onNavigate, showToast, onOpenGameModal }) => {
+const ProfileScreen: React.FC<ProfileScreenProps> = ({ currentUser, profileUser, setUser, onNavigate, showToast, onOpenGameModal, onBack }) => {
   const userToDisplay = profileUser || currentUser;
   const isMyProfile = userToDisplay.id === currentUser.id;
   
   // Use local state for the displayed user to handle visual updates like follow count
   const [displayedUser, setDisplayedUser] = useState(userToDisplay);
-  const [isFollowing, setIsFollowing] = useState(false); // In a real app, this would come from user data
+
+  useEffect(() => {
+    setDisplayedUser(userToDisplay);
+  }, [userToDisplay]);
+
+  // Track follow state based on current logged in user's following list
+  const isFollowing = currentUser.followingUserIds?.includes(userToDisplay.id) ?? false;
+  const isBlocked = currentUser.blockedUserIds?.includes(userToDisplay.id) ?? false;
 
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
+  const [isUnblockModalOpen, setIsUnblockModalOpen] = useState(false);
+
+  const handleBlockUser = () => {
+    if (isMyProfile) return;
+
+    const nextBlocked = Array.from(new Set([...(currentUser.blockedUserIds || []), userToDisplay.id]));
+    const wasFollowing = (currentUser.followingUserIds || []).includes(userToDisplay.id);
+    const nextFollowing = (currentUser.followingUserIds || []).filter(id => id !== userToDisplay.id);
+
+    setUser(prev => ({
+      ...prev,
+      blockedUserIds: nextBlocked,
+      followingUserIds: nextFollowing,
+      following: wasFollowing ? Math.max(0, (prev.following ?? prev.follow ?? 0) - 1) : (prev.following ?? prev.follow ?? 0),
+      follow: wasFollowing ? Math.max(0, (prev.following ?? prev.follow ?? 0) - 1) : (prev.following ?? prev.follow ?? 0),
+    }));
+
+    if (wasFollowing) {
+      setDisplayedUser(prev => ({
+        ...prev,
+        followers: Math.max(0, (prev.followers ?? prev.fans ?? 0) - 1),
+        fans: Math.max(0, (prev.followers ?? prev.fans ?? 0) - 1),
+      }));
+    }
+
+    try {
+      localStorage.setItem('social_live_blocked_users', JSON.stringify(nextBlocked));
+    } catch (e) {}
+
+    setIsBlockModalOpen(false);
+    showToast(`${userToDisplay.username || userToDisplay.name} has been added to your block list.`);
+  };
+
+  const handleUnblockUser = () => {
+    if (isMyProfile) return;
+
+    const nextBlocked = (currentUser.blockedUserIds || []).filter(id => id !== userToDisplay.id);
+    setUser(prev => ({
+      ...prev,
+      blockedUserIds: nextBlocked,
+    }));
+
+    try {
+      localStorage.setItem('social_live_blocked_users', JSON.stringify(nextBlocked));
+    } catch (e) {}
+
+    setIsUnblockModalOpen(false);
+    showToast(`${userToDisplay.username || userToDisplay.name} has been unblocked.`);
+  };
 
   const handleFollowToggle = () => {
-    // This is a local visual update. In a real app, this would be an API call.
-    setDisplayedUser(prevUser => ({
-        ...prevUser,
-        fans: isFollowing ? prevUser.fans - 1 : prevUser.fans + 1,
-    }));
-    setIsFollowing(prev => !prev);
+    if (isMyProfile) return;
+
+    if (!isFollowing) {
+      // Follow action
+      const newFollowers = (displayedUser.followers ?? displayedUser.fans ?? 0) + 1;
+      setDisplayedUser(prev => ({
+        ...prev,
+        followers: newFollowers,
+        fans: newFollowers,
+      }));
+
+      setUser(prev => {
+        const prevIds = prev.followingUserIds || [];
+        const nextIds = prevIds.includes(userToDisplay.id) ? prevIds : [...prevIds, userToDisplay.id];
+        const nextFollowing = (prev.following ?? prev.follow ?? 0) + 1;
+        return {
+          ...prev,
+          followingUserIds: nextIds,
+          following: nextFollowing,
+          follow: nextFollowing,
+        };
+      });
+
+      // Update Daily Mission progress if applicable
+      try {
+        const saved = localStorage.getItem('social_live_daily_missions');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const updated = parsed.map((m: any) => {
+            if (m.actionType === 'follow_user' && !m.isClaimed) {
+              return { ...m, currentProgress: Math.min(m.targetProgress, m.currentProgress + 1) };
+            }
+            return m;
+          });
+          localStorage.setItem('social_live_daily_missions', JSON.stringify(updated));
+        }
+      } catch (e) {}
+
+      showToast(`You are now following ${displayedUser.username || displayedUser.name}!`);
+    } else {
+      // Unfollow action
+      const newFollowers = Math.max(0, (displayedUser.followers ?? displayedUser.fans ?? 0) - 1);
+      setDisplayedUser(prev => ({
+        ...prev,
+        followers: newFollowers,
+        fans: newFollowers,
+      }));
+
+      setUser(prev => {
+        const prevIds = prev.followingUserIds || [];
+        const nextIds = prevIds.filter(id => id !== userToDisplay.id);
+        const nextFollowing = Math.max(0, (prev.following ?? prev.follow ?? 0) - 1);
+        return {
+          ...prev,
+          followingUserIds: nextIds,
+          following: nextFollowing,
+          follow: nextFollowing,
+        };
+      });
+
+      showToast(`Unfollowed ${displayedUser.username || displayedUser.name}.`);
+    }
   };
 
   const handlePurchaseCoins = (amount: number) => {
@@ -339,7 +453,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ currentUser, profileUser,
   
   const mainGridItems = [
     { label: 'Invite', icon: <InviteIcon />, view: 'invite' as View, notification: 'to450k co' },
-    { label: 'Reward', icon: <RewardIcon />, view: 'reward' as View },
+    { label: 'Missions', icon: <RewardIcon />, view: 'missions' as View, notification: 'Bonus' },
     { label: 'Authority', icon: <AuthorityIcon />, view: 'authority' as View, check: true },
     { label: 'Contribution', icon: <ContributionIcon />, view: 'contribution' as View },
     { label: 'Badge', icon: <BadgeIcon />, view: 'batch' as View },
@@ -365,18 +479,48 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ currentUser, profileUser,
     }
   };
 
+  const followersCount = displayedUser.followers ?? displayedUser.fans ?? 0;
+  const followingCount = displayedUser.following ?? displayedUser.follow ?? 0;
+  const friendsCount = displayedUser.friends ?? 0;
+
   return (
     <div className="h-screen flex flex-col overflow-y-auto pb-24 bg-gradient-to-br from-indigo-900 via-black to-purple-900 text-white">
       {/* Profile Header */}
       <div className="relative h-48">
         <img src={displayedUser.frameUrl || 'https://picsum.photos/seed/bg/400/200'} alt="Profile background" className="w-full h-full object-cover"/>
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-sm"></div>
-        {isMyProfile && (
-            <button onClick={() => onNavigate('settings')} className="absolute top-4 right-4 text-white p-2 bg-black/30 rounded-full">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"></div>
+
+        {/* Back button if visiting another user's profile */}
+        {!isMyProfile && onBack && (
+          <button 
+            onClick={onBack} 
+            title="Go Back"
+            aria-label="Go Back"
+            className="absolute top-4 left-4 text-white p-2.5 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full border border-purple-500/40 shadow-lg active:scale-95 transition-all z-20"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+        )}
+
+        {isMyProfile ? (
+            <button onClick={() => onNavigate('settings')} className="absolute top-4 right-4 text-white p-2 bg-black/40 hover:bg-black/60 rounded-full border border-white/10 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.438.995s.145.755.438.995l1.003.827c.42.346.564.945.26 1.431l-1.296 2.247a1.125 1.125 0 01-1.37.49l-1.217-.456c-.355-.133-.75-.072-1.075.124a6.57 6.57 0 01-.22.127c-.332.183-.582.495-.645.87l-.213 1.281c-.09.543-.56.941-1.11.941h-2.593c-.55 0-1.02-.398-1.11-.941l-.213-1.281c-.063-.374-.313-.686-.645-.87a6.52 6.52 0 01-.22-.127c-.324-.196-.72-.257-1.075-.124l-1.217.456a1.125 1.125 0 01-1.37-.49l-1.296-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.437-.995s-.145-.755-.437-.995l-1.004-.827a1.125 1.125 0 01-.26-1.431l1.296-2.247a1.125 1.125 0 011.37-.49l1.217.456c.355.133.75.072 1.075-.124.072-.044.146-.087.22-.127.332-.183.582-.495-.645-.87l.213-1.281z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
+            </button>
+        ) : (
+            <button
+              onClick={() => isBlocked ? setIsUnblockModalOpen(true) : setIsBlockModalOpen(true)}
+              className={`absolute top-4 right-4 px-3 py-1.5 rounded-full text-xs font-bold border transition-all active:scale-95 shadow-lg flex items-center gap-1.5 z-20 backdrop-blur-md ${
+                isBlocked
+                  ? 'bg-red-950/90 hover:bg-red-900 border-red-500 text-red-200'
+                  : 'bg-black/60 hover:bg-red-950/70 border-purple-500/40 hover:border-red-500/60 text-gray-200 hover:text-red-300'
+              }`}
+            >
+              <span>{isBlocked ? '🚫 Blocked' : '🚫 Block'}</span>
             </button>
         )}
       </div>
@@ -385,32 +529,143 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ currentUser, profileUser,
       <div className="relative -mt-16 px-4">
         <div className="flex items-end">
             <div className="relative">
-                <img src={displayedUser.avatar} alt={displayedUser.name} className="w-28 h-28 rounded-full object-cover border-4 border-purple-800" />
-                <img src={displayedUser.vipBadgeUrl} alt="VIP" className="absolute bottom-2 right-0 w-8 h-8" />
+                <img 
+                  src={displayedUser.avatar} 
+                  alt={displayedUser.name} 
+                  className={`w-28 h-28 rounded-full object-cover border-4 shadow-xl transition-all ${
+                    isBlocked ? 'border-red-600 grayscale-[40%]' : 'border-purple-800'
+                  }`} 
+                />
+                {displayedUser.frameUrl && (
+                  <img src={displayedUser.frameUrl} alt="Avatar Frame" className="absolute -inset-2 w-32 h-32 pointer-events-none object-contain" />
+                )}
+                <img src={displayedUser.vipBadgeUrl} alt="VIP" className="absolute bottom-2 right-0 w-8 h-8 z-10" />
+                {isBlocked && (
+                  <span className="absolute top-0 right-0 bg-red-600 text-white rounded-full p-1 text-xs shadow-md" title="Blocked user">
+                    🚫
+                  </span>
+                )}
             </div>
             <div className="ml-4 flex-grow">
-                <h1 className="text-2xl font-bold">{displayedUser.username}</h1>
+                <h1 className="text-2xl font-bold flex items-center gap-2 flex-wrap">
+                  <span>{displayedUser.username}</span>
+                  {displayedUser.activeBadge && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gradient-to-r from-yellow-500/30 to-pink-500/30 border border-yellow-400/60 text-yellow-300 font-extrabold shadow-sm">
+                      {displayedUser.activeBadge}
+                    </span>
+                  )}
+                  {isBlocked && (
+                    <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-950 border border-red-600 text-red-300 font-extrabold">
+                      Blocked
+                    </span>
+                  )}
+                </h1>
                 <div className="flex items-center gap-3 mt-1">
                     <p className="text-sm text-gray-400">ID: {displayedUser.idNumber}</p>
                 </div>
             </div>
-             {isMyProfile && <button onClick={() => setIsEditModalOpen(true)} className="ml-auto px-4 py-2 text-sm font-semibold border-2 border-pink-500 rounded-full hover:bg-pink-500/20">Edit Profile</button>}
-             {!isMyProfile && <button onClick={handleFollowToggle} className={`ml-auto px-6 py-2 text-sm font-semibold rounded-full ${isFollowing ? 'bg-gray-700 text-gray-300' : 'bg-pink-600 text-white'}`}>{isFollowing ? 'Following' : 'Follow'}</button>}
+            
+            {/* Follow / Edit / Block Actions */}
+            {isMyProfile ? (
+              <button 
+                onClick={() => setIsEditModalOpen(true)} 
+                className="ml-auto px-4 py-2 text-sm font-semibold border-2 border-pink-500 rounded-full hover:bg-pink-500/20 active:scale-95 transition-all shadow-md"
+              >
+                Edit Profile
+              </button>
+            ) : isBlocked ? (
+              <button 
+                onClick={() => setIsUnblockModalOpen(true)}
+                className="ml-auto px-4 py-2 text-xs font-bold rounded-full bg-red-950/90 hover:bg-red-900 border border-red-500 text-red-200 shadow-md active:scale-95 transition-all flex items-center gap-1.5"
+              >
+                <span>🚫</span>
+                <span>Unblock</span>
+              </button>
+            ) : (
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => setIsBlockModalOpen(true)}
+                  title="Block this user"
+                  className="px-3 py-2 text-xs font-semibold rounded-full bg-gray-900/90 hover:bg-red-950/80 border border-purple-800/60 hover:border-red-500/60 text-gray-300 hover:text-red-300 transition-all active:scale-95 flex items-center gap-1 shadow-sm"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.366zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
+                  </svg>
+                  <span>Block</span>
+                </button>
+                <button 
+                  onClick={handleFollowToggle} 
+                  className={`px-4 py-2 text-xs font-bold rounded-full transition-all duration-200 shadow-md flex items-center gap-1.5 active:scale-95 group ${
+                    isFollowing 
+                      ? 'bg-gray-800/90 hover:bg-red-950/70 border border-purple-500/50 hover:border-red-500/70 text-gray-200 hover:text-red-300' 
+                      : 'bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white shadow-pink-500/30 hover:shadow-pink-500/50'
+                  }`}
+                >
+                  {isFollowing ? (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-green-400 group-hover:text-red-400 transition-colors" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      <span className="group-hover:hidden">Following</span>
+                      <span className="hidden group-hover:inline">Unfollow</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                      </svg>
+                      <span>Follow</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
         </div>
+
+        {/* Blocked User Notice Banner */}
+        {!isMyProfile && isBlocked && (
+          <div className="mt-3 p-3 rounded-xl bg-red-950/70 border border-red-700/80 text-xs text-red-200 flex items-center justify-between shadow-inner backdrop-blur-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-base flex-shrink-0">🚫</span>
+              <span>This user is blocked. They cannot appear in your searches, message you, or interact with your rooms.</span>
+            </div>
+            <button
+              onClick={() => setIsUnblockModalOpen(true)}
+              className="ml-3 px-3 py-1 bg-red-900/80 hover:bg-red-800 text-white rounded-lg font-bold border border-red-500/40 text-xs flex-shrink-0"
+            >
+              Unblock
+            </button>
+          </div>
+        )}
         
         {/* Bio */}
-        <p className="mt-4 text-sm text-gray-300">{displayedUser.bio}</p>
+        <p className="mt-4 text-sm text-gray-300">{displayedUser.bio || 'No bio provided yet.'}</p>
 
-        {/* Stats */}
-        <div className="flex justify-around text-center my-6">
-            <div><p className="font-bold text-lg">{displayedUser.follow}</p><p className="text-xs text-gray-400">Follow</p></div>
-            <div><p className="font-bold text-lg">{displayedUser.friends}</p><p className="text-xs text-gray-400">Friends</p></div>
-            <div><p className="font-bold text-lg">{displayedUser.fans}</p><p className="text-xs text-gray-400">Fans</p></div>
+        {/* Prominent Followers, Following, and Friends Stats */}
+        <div className="grid grid-cols-3 gap-2 text-center my-6 bg-gradient-to-r from-purple-950/50 via-black/50 to-indigo-950/50 border border-purple-800/40 rounded-2xl py-3.5 px-2 shadow-lg backdrop-blur-md">
+            <div className="border-r border-purple-800/40">
+                <p className="font-extrabold text-xl text-white tracking-tight">
+                    {followersCount.toLocaleString()}
+                </p>
+                <p className="text-xs text-purple-300 font-semibold uppercase tracking-wider mt-0.5">Followers</p>
+            </div>
+            <div className="border-r border-purple-800/40">
+                <p className="font-extrabold text-xl text-white tracking-tight">
+                    {followingCount.toLocaleString()}
+                </p>
+                <p className="text-xs text-purple-300 font-semibold uppercase tracking-wider mt-0.5">Following</p>
+            </div>
+            <div>
+                <p className="font-extrabold text-xl text-white tracking-tight">
+                    {friendsCount.toLocaleString()}
+                </p>
+                <p className="text-xs text-purple-300 font-semibold uppercase tracking-wider mt-0.5">Friends</p>
+            </div>
         </div>
         
-        {/* MODIFIED: Level removed, VIP pushed to the right */}
+        {/* VIP Level */}
         <div className="flex items-center justify-end text-sm my-4">
-             <div onClick={() => onNavigate('vip')} className="flex items-center gap-2 cursor-pointer">
+             <div onClick={() => onNavigate('vip')} className="flex items-center gap-2 cursor-pointer bg-purple-950/40 border border-purple-800/40 px-3 py-1 rounded-full">
                 <span className="font-bold text-yellow-400">VIP {displayedUser.vipLevel}</span>
              </div>
         </div>
@@ -444,6 +699,91 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ currentUser, profileUser,
       {isMyProfile && isPurchaseModalOpen && <PurchaseCoinsModal onPurchase={handlePurchaseCoins} onClose={() => setIsPurchaseModalOpen(false)} />}
       {isMyProfile && isWithdrawModalOpen && <WithdrawalModal user={currentUser} onClose={() => setIsWithdrawModalOpen(false)} setUser={setUser} showToast={showToast} />}
       {isMyProfile && isEditModalOpen && <EditProfileModal user={currentUser} onClose={() => setIsEditModalOpen(false)} setUser={setUser} />}
+
+      {/* Block User Confirmation Modal */}
+      {!isMyProfile && isBlockModalOpen && (
+        <div 
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+          onClick={() => setIsBlockModalOpen(false)}
+        >
+          <div 
+            className="bg-gray-900 border border-red-500/50 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl relative text-white"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-16 h-16 mx-auto mb-4 relative">
+              <img 
+                src={displayedUser.avatar} 
+                alt={displayedUser.name} 
+                className="w-16 h-16 rounded-full object-cover border-2 border-red-500 mx-auto"
+              />
+              <span className="absolute -bottom-1 -right-1 text-sm bg-red-600 rounded-full p-0.5">
+                🚫
+              </span>
+            </div>
+            <h3 className="text-lg font-bold text-white mb-1">
+              Block {displayedUser.username || displayedUser.name}?
+            </h3>
+            <p className="text-xs text-gray-300 mb-6 leading-relaxed">
+              They will be added to your block list. They will no longer appear in your searches, cannot send you messages, and cannot interact with your streams.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setIsBlockModalOpen(false)}
+                className="py-2.5 rounded-xl text-sm font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBlockUser}
+                className="py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white shadow-lg shadow-red-900/40 active:scale-95 transition-all"
+              >
+                Block User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unblock Confirmation Modal */}
+      {!isMyProfile && isUnblockModalOpen && (
+        <div 
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+          onClick={() => setIsUnblockModalOpen(false)}
+        >
+          <div 
+            className="bg-gray-900 border border-purple-700 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl relative text-white"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-16 h-16 mx-auto mb-4">
+              <img 
+                src={displayedUser.avatar} 
+                alt={displayedUser.name} 
+                className="w-16 h-16 rounded-full object-cover border-2 border-purple-500 mx-auto"
+              />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-1">
+              Unblock {displayedUser.username || displayedUser.name}?
+            </h3>
+            <p className="text-xs text-gray-300 mb-6 leading-relaxed">
+              They will be removed from your block list and will be able to search and interact with you again.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setIsUnblockModalOpen(false)}
+                className="py-2.5 rounded-xl text-sm font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUnblockUser}
+                className="py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-90 text-white shadow-lg shadow-pink-500/20 active:scale-95 transition-all"
+              >
+                Unblock
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

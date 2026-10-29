@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Room, User, Gift, View } from '../types';
 import { mockGifts, mockUser as fallbackOpponent } from '../constants';
+import ShareModal from './ShareModal';
 
 // --- TYPE DEFINITIONS for this component ---
 interface ChatMessage {
@@ -88,10 +89,13 @@ const ActionPanel: React.FC<{ title: string; children: React.ReactNode; onClose:
 );
 
 // --- NEW AUDIO ROOM SEAT COMPONENT (Adjusted for half-screen layout) ---
-const AudioSeat: React.FC<{ seatNumber: number; participant: User | null; isHost: boolean }> = ({ seatNumber, participant, isHost }) => {
+const AudioSeat: React.FC<{ seatNumber: number; participant: User | null; isHost: boolean; onSelectParticipant?: (user: User) => void; }> = ({ seatNumber, participant, isHost, onSelectParticipant }) => {
     // Smaller size for the half-screen grid
     return (
-        <div className="relative w-16 h-16 flex flex-col items-center justify-center">
+        <div 
+            onClick={() => participant && onSelectParticipant?.(participant)}
+            className={`relative w-16 h-16 flex flex-col items-center justify-center ${participant ? 'cursor-pointer hover:scale-105 active:scale-95 transition-transform' : ''}`}
+        >
             {participant ? (
                 <img 
                     src={participant.avatar} 
@@ -126,35 +130,14 @@ const ExitMenu: React.FC<{
     currentRoom: Room;
     onJoinRoom: (room: Room) => void;
     showToast: (message: string) => void;
-}> = ({ onClose, onConfirmLeave, rooms, currentRoom, onJoinRoom, showToast }) => {
+    onOpenShare: () => void;
+}> = ({ onClose, onConfirmLeave, rooms, currentRoom, onJoinRoom, showToast, onOpenShare }) => {
     
     const suggestedRooms = rooms.filter(r => r.id !== currentRoom.id).slice(0, 3);
     
     const handleJoin = (room: Room) => {
         onClose();
         onJoinRoom(room);
-    };
-
-    const handleShare = async () => {
-        const shareData = {
-            title: 'Join my live stream!',
-            text: `Check out this room: ${currentRoom.title}`,
-            url: window.location.href, // In a real app, this would be a direct link to the room
-        };
-        try {
-            if (navigator.share) {
-                await navigator.share(shareData);
-            } else {
-                // Fallback for browsers that don't support the Web Share API
-                navigator.clipboard.writeText(shareData.url);
-                showToast('Link copied to clipboard!');
-            }
-        } catch (err) {
-            console.error('Share error:', err);
-            showToast('Could not share at this time.');
-        } finally {
-            onClose();
-        }
     };
 
     const handleMinimize = () => {
@@ -167,13 +150,12 @@ const ExitMenu: React.FC<{
         onClose();
     };
 
-
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex flex-col justify-end" onClick={onClose}>
             <div className="bg-gray-900 border-t-2 border-purple-800 p-4 rounded-t-2xl" onClick={e => e.stopPropagation()}>
                 <div className="grid grid-cols-3 gap-4 text-center mb-6">
                     <button onClick={handleMinimize} className="flex flex-col items-center gap-2 text-gray-300"><div className="w-12 h-12 bg-black/50 rounded-full flex items-center justify-center text-2xl">🔄</div><span className="text-xs">Minimize</span></button>
-                    <button onClick={handleShare} className="flex flex-col items-center gap-2 text-gray-300"><div className="w-12 h-12 bg-black/50 rounded-full flex items-center justify-center text-2xl">🔗</div><span className="text-xs">Share</span></button>
+                    <button onClick={() => { onClose(); onOpenShare(); }} className="flex flex-col items-center gap-2 text-gray-300"><div className="w-12 h-12 bg-black/50 rounded-full flex items-center justify-center text-2xl">🔗</div><span className="text-xs">Share</span></button>
                     <button onClick={handleReport} className="flex flex-col items-center gap-2 text-gray-300"><div className="w-12 h-12 bg-black/50 rounded-full flex items-center justify-center text-2xl">🚩</div><span className="text-xs">Report</span></button>
                 </div>
 
@@ -208,10 +190,11 @@ const UnifiedRoomHeader: React.FC<{
     room: Room;
     onViewProfile: (user: User) => void;
     onClose: () => void;
+    onShare: () => void;
     isHost: boolean;
     isFollowing: boolean;
     onFollow: () => void;
-}> = ({ room, onViewProfile, onClose, isHost, isFollowing, onFollow }) => {
+}> = ({ room, onViewProfile, onClose, onShare, isHost, isFollowing, onFollow }) => {
     return (
         <div className="absolute top-0 left-0 right-0 p-3 flex items-center justify-between z-20 bg-gradient-to-b from-black/50 to-transparent">
             {/* Left side: Host Info & Follow button */}
@@ -233,12 +216,22 @@ const UnifiedRoomHeader: React.FC<{
                 )}
             </div>
 
-            {/* Right side: Viewers and Close button */}
+            {/* Right side: Viewers, Share, and Close button */}
             <div className="flex items-center gap-2">
                 <div className="p-1.5 px-3 bg-black/50 rounded-full flex items-center gap-1.5">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-300" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
                     <span className="text-xs text-white">{room.viewers}</span>
                 </div>
+                <button
+                    onClick={onShare}
+                    title="Share Live Stream"
+                    aria-label="Share Live Stream"
+                    className="w-10 h-10 bg-black/50 hover:bg-purple-900/60 rounded-full flex items-center justify-center transition-colors active:scale-95"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-pink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                </button>
                 <button onClick={onClose} className="w-10 h-10 bg-black/50 rounded-full flex items-center justify-center">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -270,6 +263,7 @@ const RoomScreen: React.FC<RoomScreenProps> = ({ room, rooms, user, setUser, onL
   const [isMoreOptionsOpen, setIsMoreOptionsOpen] = useState(false);
   const [isPkPanelOpen, setIsPkPanelOpen] = useState(false);
   const [isExitMenuOpen, setIsExitMenuOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   
   const [isSelfMuted, setIsSelfMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
@@ -277,15 +271,13 @@ const RoomScreen: React.FC<RoomScreenProps> = ({ room, rooms, user, setUser, onL
   const [flyingEmojis, setFlyingEmojis] = useState<FlyingEmoji[]>([]);
   const [roomGiftsValue, setRoomGiftsValue] = useState(190634);
 
-  const [isFollowing, setIsFollowing] = useState(false);
-
   const [isBeautyPanelOpen, setIsBeautyPanelOpen] = useState(false);
   const [brightness, setBrightness] = useState(100);
   const [saturation, setSaturation] = useState(100);
-
   const [pkState, setPkState] = useState<{isActive: boolean; timer: number; myScore: number; opponentScore: number; opponent: User | null; result: 'win' | 'lose' | 'draw' | null;}>({ isActive: false, timer: 300, myScore: 0, opponentScore: 0, opponent: null, result: null, });
-  
+
   const isHost = user.id === currentRoomData.host.id;
+  const isFollowing = user.followingUserIds?.includes(currentRoomData.host.id) ?? false;
   
   const addMessage = (msg: ChatMessage) => { setMessages(prev => [...prev, msg].slice(-50)); };
 
@@ -306,29 +298,54 @@ const RoomScreen: React.FC<RoomScreenProps> = ({ room, rooms, user, setUser, onL
   };
 
   const handleFollow = () => {
-    const newFollowingState = !isFollowing;
-    setIsFollowing(newFollowingState);
+    if (isHost) return;
+    const willFollow = !isFollowing;
 
-    // Update the local room data to reflect the change in fan count
+    // Update the local room data to reflect the change in fan/follower count
     setCurrentRoomData(prevRoom => {
         if (!prevRoom) return prevRoom;
-        const newFans = newFollowingState ? prevRoom.host.fans + 1 : prevRoom.host.fans - 1;
-        
-        // This ensures that when onViewProfile is called, it passes the updated user object
-        const updatedHost = { ...prevRoom.host, fans: newFans };
-        
-        // Also update the main user object if the host is the user being viewed
-        // In a real app, this would be a global state update.
-        // For now, we pass the updated host to onViewProfile.
-        onViewProfile(updatedHost); // This is a bit of a hack to update the state upstream for the profile view
-        
+        const currentFans = prevRoom.host.followers ?? prevRoom.host.fans ?? 0;
+        const newFans = willFollow ? currentFans + 1 : Math.max(0, currentFans - 1);
+        const updatedHost = { ...prevRoom.host, fans: newFans, followers: newFans };
         return {
             ...prevRoom,
             host: updatedHost,
         };
     });
 
-    showToast(newFollowingState ? `Followed ${room.host.name}!` : `Unfollowed ${room.host.name}.`);
+    setUser(prevUser => {
+      const prevIds = prevUser.followingUserIds || [];
+      const nextIds = willFollow
+        ? (prevIds.includes(currentRoomData.host.id) ? prevIds : [...prevIds, currentRoomData.host.id])
+        : prevIds.filter(id => id !== currentRoomData.host.id);
+      const nextCount = willFollow
+        ? (prevUser.following ?? prevUser.follow ?? 0) + 1
+        : Math.max(0, (prevUser.following ?? prevUser.follow ?? 0) - 1);
+      return {
+        ...prevUser,
+        followingUserIds: nextIds,
+        following: nextCount,
+        follow: nextCount,
+      };
+    });
+
+    if (willFollow) {
+      try {
+        const saved = localStorage.getItem('social_live_daily_missions');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const updated = parsed.map((m: any) => {
+            if (m.actionType === 'follow_user' && !m.isClaimed) {
+              return { ...m, currentProgress: Math.min(m.targetProgress, m.currentProgress + 1) };
+            }
+            return m;
+          });
+          localStorage.setItem('social_live_daily_missions', JSON.stringify(updated));
+        }
+      } catch (e) {}
+    }
+
+    showToast(willFollow ? `Followed ${currentRoomData.host.name}!` : `Unfollowed ${currentRoomData.host.name}.`);
   };
   
   const handleAllInGift = () => {
@@ -370,16 +387,9 @@ const RoomScreen: React.FC<RoomScreenProps> = ({ room, rooms, user, setUser, onL
     }, 5000); // Corresponds to animation duration
   };
   
-    const handleShare = async () => {
-        const shareData = { title: 'Join my live stream!', text: `Check out this room: ${currentRoomData.title}`, url: window.location.href };
-        try {
-            if (navigator.share) await navigator.share(shareData);
-            else {
-                navigator.clipboard.writeText(shareData.url);
-                showToast('Link copied to clipboard!');
-            }
-        } catch (err) { showToast('Could not share at this time.'); }
-    };
+  const handleShare = () => {
+    setIsShareModalOpen(true);
+  };
     
       const moreOptionsItems = [
         { label: 'Room settings', icon: '⚙️', action: () => onNavigate('roomSettings'), hostOnly: true },
@@ -402,7 +412,7 @@ const RoomScreen: React.FC<RoomScreenProps> = ({ room, rooms, user, setUser, onL
       </div>
 
       <div className="absolute bottom-24 left-4 w-2/3 h-1/4 z-10 flex flex-col space-y-1 overflow-y-auto pointer-events-none">
-        {messages.map((msg, index) => (
+        {messages.filter(msg => !user.blockedUserIds?.includes(msg.user.id)).map((msg, index) => (
           <div key={index} className="bg-black/40 p-1.5 rounded-lg text-xs w-fit max-w-full">
             <span className={msg.type === 'system' ? 'text-yellow-400' : 'text-purple-300 font-bold'}>{msg.user.name}: </span>
             <span className="text-white">{msg.text}</span>
@@ -417,6 +427,14 @@ const RoomScreen: React.FC<RoomScreenProps> = ({ room, rooms, user, setUser, onL
             <button onClick={() => setIsGiftPanelOpen(true)} className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center text-3xl shadow-lg">🎁</button>
         </div>
         <div className="flex items-center gap-2">
+            <button 
+                onClick={() => setIsShareModalOpen(true)} 
+                title="Share Room"
+                aria-label="Share Room"
+                className="w-10 h-10 bg-black/50 hover:bg-purple-900/60 rounded-full flex items-center justify-center text-xl transition-colors active:scale-95 text-pink-400"
+            >
+                🔗
+            </button>
             <button onClick={onOpenGameModal} className="w-10 h-10 bg-black/50 rounded-full flex items-center justify-center text-2xl">🎮</button>
             <button onClick={() => setIsMoreOptionsOpen(true)} className="w-10 h-10 bg-black/50 rounded-full flex items-center justify-center text-2xl">•••</button>
         </div>
@@ -431,13 +449,13 @@ const RoomScreen: React.FC<RoomScreenProps> = ({ room, rooms, user, setUser, onL
             <div className="flex-grow h-1/2 p-2 grid grid-cols-5 gap-x-2 gap-y-1 content-center justify-items-center">
                  {Array.from({ length: 20 }).map((_, i) => {
                     const participant = currentRoomData.participants[i];
-                    return <AudioSeat key={i} seatNumber={i + 1} participant={participant} isHost={participant?.id === currentRoomData.host.id} />
+                    return <AudioSeat key={i} seatNumber={i + 1} participant={participant} isHost={participant?.id === currentRoomData.host.id} onSelectParticipant={onViewProfile} />
                 })}
             </div>
 
              <div className="flex-grow h-1/2 flex flex-col-reverse p-4 overflow-hidden">
                 <div className="space-y-2 overflow-y-auto">
-                    {messages.map((msg, index) => (
+                    {messages.filter(msg => !user.blockedUserIds?.includes(msg.user.id)).map((msg, index) => (
                         <div key={index} className="bg-black/40 p-1.5 rounded-lg text-xs w-fit max-w-full">
                             <span className={msg.type === 'system' ? 'text-yellow-400' : 'text-purple-300 font-bold'}>{msg.user.name}: </span>
                             <span className="text-white">{msg.text}</span>
@@ -452,6 +470,7 @@ const RoomScreen: React.FC<RoomScreenProps> = ({ room, rooms, user, setUser, onL
                 <div className="flex items-center gap-1.5">
                     <button onClick={() => setIsSelfMuted(p => !p)} className="w-9 h-9 bg-black/50 rounded-full flex items-center justify-center text-xl">{isSelfMuted ? '🔇' : '🎤'}</button>
                     <button onClick={() => setIsSpeakerOn(p => !p)} className="w-9 h-9 bg-black/50 rounded-full flex items-center justify-center text-xl">{isSpeakerOn ? '🔊' : '🔈'}</button>
+                    <button onClick={() => setIsShareModalOpen(true)} title="Share Room" aria-label="Share Room" className="w-9 h-9 bg-black/50 hover:bg-purple-900/60 rounded-full flex items-center justify-center text-xl text-pink-400 transition-colors active:scale-95">🔗</button>
                     <button onClick={() => setIsGiftPanelOpen(true)} className="w-9 h-9 bg-black/50 rounded-full flex items-center justify-center text-xl">🎁</button>
                     <button onClick={onOpenGameModal} className="w-9 h-9 bg-black/50 rounded-full flex items-center justify-center text-xl">🎮</button>
                     <button onClick={() => handleEmojiClick('💖')} className="w-9 h-9 bg-black/50 rounded-full flex items-center justify-center text-xl">💖</button>
@@ -471,6 +490,7 @@ const RoomScreen: React.FC<RoomScreenProps> = ({ room, rooms, user, setUser, onL
           room={currentRoomData}
           onViewProfile={onViewProfile}
           onClose={() => setIsExitMenuOpen(true)}
+          onShare={() => setIsShareModalOpen(true)}
           isHost={isHost}
           isFollowing={isFollowing}
           onFollow={handleFollow}
@@ -484,6 +504,7 @@ const RoomScreen: React.FC<RoomScreenProps> = ({ room, rooms, user, setUser, onL
             currentRoom={currentRoomData}
             onJoinRoom={onJoinRoom}
             showToast={showToast}
+            onOpenShare={() => setIsShareModalOpen(true)}
         />
       )}
 
@@ -555,6 +576,13 @@ const RoomScreen: React.FC<RoomScreenProps> = ({ room, rooms, user, setUser, onL
       <div id="emoji-container" className="absolute top-0 left-0 w-full h-full pointer-events-none z-30 overflow-hidden">
         {flyingEmojis.map(e => <div key={e.id} className="absolute bottom-24 text-4xl animate-fly-up" style={e.style}>{e.emoji}</div>)}
       </div>
+
+      <ShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        room={currentRoomData}
+        showToast={showToast}
+      />
 
     </div>
   );
