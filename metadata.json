@@ -1,0 +1,9 @@
+{
+  "name": "Copy of Taza live ",
+  "description": "A web application simulating a live streaming platform with audio/video rooms, gifting, user profiles, and interactive games, featuring AI-powered bio generation with Gemini.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": []
+}
